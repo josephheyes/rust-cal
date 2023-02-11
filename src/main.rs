@@ -31,6 +31,9 @@ fn main() {
     }
 }
 
+// Takes a string of format "YYYYMMDDTHHMMSS" and returns a NaiveDateTime struct 
+// (because using timezone is out of scope for my current uses)
+// TODO: Obviously don't return default date if error reading it (as rare as this may be) as the event would not be displayed (when timetable printing functionality is added)
 fn format_datetime(time_string: String) -> NaiveDateTime {
     match chrono::NaiveDateTime::parse_from_str(&time_string, "%Y%m%dT%H%M%S") {
         Ok(datetime) => {
@@ -46,6 +49,9 @@ fn format_datetime(time_string: String) -> NaiveDateTime {
     }
 }
 
+// Main parsing function
+// Uses the IcalParser and extracts only the necessary values to display and sets them in custom constructed Event structs
+// TODO: Better error handling
 fn parse() -> Result<Calendar, Error> {
     let buf = BufReader::new(File::open("calendars/timetable.ics").unwrap());
     let parser = ical::IcalParser::new(buf);
