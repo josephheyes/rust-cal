@@ -2,7 +2,7 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use ical::{self};
 use std::fmt::Error;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, self};
 
 #[derive(Default)]
 pub struct Calendar {
@@ -19,6 +19,7 @@ pub struct Event {
 }
 
 fn main() {
+    download_calendar();
     match parse() {
         Ok(data) => {
             for event in data.events {
@@ -37,7 +38,7 @@ fn main() {
 fn format_datetime(time_string: String) -> NaiveDateTime {
     match chrono::NaiveDateTime::parse_from_str(&time_string, "%Y%m%dT%H%M%S") {
         Ok(datetime) => {
-            return datetime;
+            return datetime
         }
         Err(error) => {
             println!("Error reading DateTime: {error}\nUsing default DateTime");
@@ -47,6 +48,14 @@ fn format_datetime(time_string: String) -> NaiveDateTime {
             );
         }
     }
+}
+
+// Makes GET request to the UoN iCalendar server to download the timetable
+fn download_calendar() {
+    let res = reqwest::blocking::get("https://ical.mycal.nottingham.ac.uk/e597c0a6-23c3-11ed-9b98-0050569f01bd")
+        .expect("request failed").text().expect("invalid body");
+    let mut cal = File::create("calendars/timetable.ics").expect("file creation failure");
+    io::copy(&mut res.as_bytes(), &mut cal).expect("Failed to copy body to file");
 }
 
 // Main parsing function
