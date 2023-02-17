@@ -18,10 +18,12 @@ pub struct Event {
     pub desc: String,
     #[tabled(rename = "Location")]
     pub location: String,
-    #[tabled(rename = "Start")]
+    #[tabled(skip)]
     pub dt_start: NaiveDateTime,
-    #[tabled(rename = "End")]
+    #[tabled(skip)]
     pub dt_end: NaiveDateTime,
+    #[tabled(rename = "Duration")]
+    pub duration: String,
 }
 
 fn main() {
@@ -93,19 +95,26 @@ fn parse() -> Result<Calendar, Error> {
                     for property in event.properties {
                         if property.name == "SUMMARY" && property.value.is_some() {
                             constructed_event.title = property.value.unwrap();
+                            
                         } else if property.name == "DESCRIPTION" && property.value.is_some() {
-                            constructed_event.desc = property.value.unwrap();
+                            let desc = property.value.unwrap();
+                            constructed_event.desc = desc[desc.find(":").unwrap()+2..desc.find("\\n").unwrap()].to_string();
+
                         } else if property.name == "LOCATION" && property.value.is_some() {
                             constructed_event.location = property.value.unwrap();
+
                         } else if property.name == "DTSTART" && property.value.is_some() {
                             let time_str = property.value.unwrap();
                             constructed_event.dt_start = format_datetime(time_str);
+
                         } else if property.name == "DTEND" && property.value.is_some() {
                             let time_str = property.value.unwrap();
                             constructed_event.dt_end = format_datetime(time_str);
                         }
                     }
+                    constructed_event.duration = format!("{}-{}", constructed_event.dt_start.time().to_string(), constructed_event.dt_end.time().to_string());
                     data.events.push(constructed_event);
+
                 }
             }
             Err(_) => {
