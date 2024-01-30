@@ -1,9 +1,10 @@
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Local};
 use ical::{self};
+use tabled::object::Rows;
 use std::fmt::Error;
 use std::fs::File;
 use std::io::{BufReader, self};
-use tabled::{Tabled, Table};
+use tabled::{Modify, Table, Tabled, Width};
 
 #[derive(Default)]
 pub struct Calendar {
@@ -31,7 +32,7 @@ fn main() {
     match parse() {
         Ok(data) => {
             let timetable_today = get_today_events(data);
-            let table = Table::new(timetable_today).to_string();
+            let table = Table::new(timetable_today).with(Modify::new(Rows::new(1..)).with(Width::wrap(20).keep_words())).to_string();
             println!("{table}");
         }
         Err(error) => {
