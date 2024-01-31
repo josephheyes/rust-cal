@@ -1,9 +1,10 @@
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Local};
+use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime};
 use ical::{self};
-use tabled::object::Rows;
+use std::env;
 use std::fmt::Error;
 use std::fs::File;
-use std::io::{BufReader, self};
+use std::io::{self, BufReader};
+use tabled::object::Rows;
 use tabled::{Modify, Table, Tabled, Width};
 
 #[derive(Default)]
@@ -29,38 +30,63 @@ pub struct Event {
 
 fn main() {
     download_calendar();
-    match parse() {
-        Ok(data) => {
-            let timetable_today = get_today_events(data);
-            let table = Table::new(timetable_today).with(Modify::new(Rows::new(1..)).with(Width::wrap(20).keep_words())).to_string();
-            println!("{table}");
-        }
+    let args: Vec<String> = env::args().collect();
+    let cal = match parse() {
+        Ok(data) => data,
         Err(error) => {
             println!("Error parsing file: {error}");
+            std::process::exit(-1);
+        },
+    };
+
+    let timetable: Vec<Event> = match args.len() {
+        // no args (get events for today's date)
+        1 => get_events(cal, Local::now().date_naive()),
+        // 1 arg
+        2 => {
+            match args[1].as_str() {
+                "today" => get_events(cal, Local::now().date_naive()),
+                "tomorrow" => {
+                    let today = Local::now();
+                    let tomorrow: NaiveDate = (today + Duration::days(1)).date_naive();
+                    get_events(cal, tomorrow)
+                },
+                // Unsupported args
+                _ => {
+                    println!("Not a valid argument");
+                    std::process::exit(-1);
+                }
+            }
+        },
+        // Unsupported number of args
+        _ => {
+            println!("Too many arguments");
+            std::process::exit(-1);
         }
-    }
+    };
+
+    let table = Table::new(timetable).with(Modify::new(Rows::new(1..)).with(Width::wrap(20).keep_words())).to_string();
+    println!("{table}");
 }
 
-fn get_today_events(cal: Calendar) -> Vec<Event> {
+fn get_events(cal: Calendar, date: NaiveDate) -> Vec<Event> {
     let mut events: Vec<Event> = vec![];
-    let today = Local::now().date_naive();
+    // let date = Local::now().date_naive();
 
     for event in cal.events {
-        if event.dt_start.date() == today {
+        if event.dt_start.date() == date {
             events.push(event);
         }
     }
     return events;
 }
 
-// Takes a string of format "YYYYMMDDTHHMMSS" and returns a NaiveDateTime 
+// Takes a string of format "YYYYMMDDTHHMMSS" and returns a NaiveDateTime
 // (because using timezone is out of scope for my current uses)
 // TODO: Obviously don't return default date if error reading it (as rare as this may be) as the event would not be displayed (when timetable printing functionality is added)
 fn format_datetime(time_string: String) -> NaiveDateTime {
     match chrono::NaiveDateTime::parse_from_str(&time_string, "%Y%m%dT%H%M%S") {
-        Ok(datetime) => {
-            return datetime
-        }
+        Ok(datetime) => return datetime,
         Err(error) => {
             println!("Error reading DateTime: {error}\nUsing default DateTime");
             return NaiveDateTime::new(
@@ -73,8 +99,12 @@ fn format_datetime(time_string: String) -> NaiveDateTime {
 
 // Makes GET request to the UoN iCalendar server to download the timetable
 fn download_calendar() {
-    let res = reqwest::blocking::get("https://ical.mycal.nottingham.ac.uk/e597c0a6-23c3-11ed-9b98-0050569f01bd")
-        .expect("request failed").text().expect("invalid body");
+    let res = reqwest::blocking::get(
+        "https://ical.mycal.nottingham.ac.uk/e597c0a6-23c3-11ed-9b98-0050569f01bd",
+    )
+    .expect("request failed")
+    .text()
+    .expect("invalid body");
     let mut cal = File::create("timetable.ics").expect("file creation failure");
     io::copy(&mut res.as_bytes(), &mut cal).expect("Failed to copy body to file");
 }
@@ -96,26 +126,27 @@ fn parse() -> Result<Calendar, Error> {
                     for property in event.properties {
                         if property.name == "SUMMARY" && property.value.is_some() {
                             constructed_event.title = property.value.unwrap();
-                            
                         } else if property.name == "DESCRIPTION" && property.value.is_some() {
                             let desc = property.value.unwrap();
-                            constructed_event.desc = desc[desc.find(":").unwrap()+2..desc.find("\\n").unwrap()].to_string();
-
+                            constructed_event.desc = desc
+                                [desc.find(":").unwrap() + 2..desc.find("\\n").unwrap()]
+                                .to_string();
                         } else if property.name == "LOCATION" && property.value.is_some() {
                             constructed_event.location = property.value.unwrap();
-
                         } else if property.name == "DTSTART" && property.value.is_some() {
                             let time_str = property.value.unwrap();
                             constructed_event.dt_start = format_datetime(time_str);
-
                         } else if property.name == "DTEND" && property.value.is_some() {
                             let time_str = property.value.unwrap();
                             constructed_event.dt_end = format_datetime(time_str);
                         }
                     }
-                    constructed_event.duration = format!("{}-{}", constructed_event.dt_start.time().to_string(), constructed_event.dt_end.time().to_string());
+                    constructed_event.duration = format!(
+                        "{}-{}",
+                        constructed_event.dt_start.time().to_string(),
+                        constructed_event.dt_end.time().to_string()
+                    );
                     data.events.push(constructed_event);
-
                 }
             }
             Err(_) => {
