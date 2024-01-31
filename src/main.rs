@@ -1,9 +1,9 @@
 use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime};
 use ical::{self};
-use std::env;
 use std::fmt::Error;
 use std::fs::File;
 use std::io::{self, BufReader};
+use std::{env, vec};
 use tabled::object::Rows;
 use tabled::{Modify, Table, Tabled, Width};
 
@@ -28,6 +28,17 @@ pub struct Event {
     pub duration: String,
 }
 
+fn help() {
+    println!("usage:
+        rust-cal help
+            Show this menu
+        rust-cal today
+            Show today's events. 'today' is optional
+        rust-cal tomorrow
+            Show tomorrow's events."
+    )
+}
+
 fn main() {
     download_calendar();
     let args: Vec<String> = env::args().collect();
@@ -36,37 +47,54 @@ fn main() {
         Err(error) => {
             println!("Error parsing file: {error}");
             std::process::exit(-1);
-        },
-    };
-
-    let timetable: Vec<Event> = match args.len() {
-        // no args (get events for today's date)
-        1 => get_events(cal, Local::now().date_naive()),
-        // 1 arg
-        2 => {
-            match args[1].as_str() {
-                "today" => get_events(cal, Local::now().date_naive()),
-                "tomorrow" => {
-                    let today = Local::now();
-                    let tomorrow: NaiveDate = (today + Duration::days(1)).date_naive();
-                    get_events(cal, tomorrow)
-                },
-                // Unsupported args
-                _ => {
-                    println!("Not a valid argument");
-                    std::process::exit(-1);
-                }
-            }
-        },
-        // Unsupported number of args
-        _ => {
-            println!("Too many arguments");
-            std::process::exit(-1);
         }
     };
 
-    let table = Table::new(timetable).with(Modify::new(Rows::new(1..)).with(Width::wrap(20).keep_words())).to_string();
-    println!("{table}");
+    // Awful code
+    let mut timetable: Vec<Event> = vec![];
+    let mut display_table = false;
+    match args.len() {
+        // no args (get events for today's date)
+        1 => {
+            timetable = get_events(cal, Local::now().date_naive());
+            display_table = true;
+        }
+        // 1 arg
+        2 => {
+            match args[1].as_str() {
+                "today" => {
+                    timetable = get_events(cal, Local::now().date_naive());
+                    display_table = true;
+                },
+                "tomorrow" => {
+                    let today = Local::now();
+                    let tomorrow: NaiveDate = (today + Duration::days(1)).date_naive();
+                    timetable = get_events(cal, tomorrow);
+                    display_table = true;
+                }
+                "help" => {
+                    help();
+                }
+                // Unsupported args
+                _ => {
+                    println!("Not a valid argument");
+                    help();
+                }
+            }
+        }
+        // Unsupported number of args
+        _ => {
+            println!("Too many arguments");
+            help();
+        }
+    };
+
+    if display_table {
+        let table = Table::new(timetable)
+            .with(Modify::new(Rows::new(1..)).with(Width::wrap(20).keep_words()))
+            .to_string();
+        println!("{table}");
+    }
 }
 
 fn get_events(cal: Calendar, date: NaiveDate) -> Vec<Event> {
